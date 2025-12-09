@@ -1,3 +1,45 @@
+# Node / Package managers
+node_modules
+.pnp.*
+yarn-error.log
+package-lock.json
+pnpm-lock.yaml
+
+# Build outputs
+dist
+.next
+out
+.vercel
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Editor / OS junk
+.DS_Store
+.idea
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing / coverage
+coverage
+
+# TypeScript
+*.tsbuildinfo
+
+# Misc caches
+.turbo
+.cache
+.parcel-cache
+.eslintcache
+
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
