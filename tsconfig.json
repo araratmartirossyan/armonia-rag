@@ -22,7 +22,7 @@
       "@/*": ["./src/*", "./*"]
     }
   },
-  "include": ["src", "components", "lib"],
-  "exclude": ["app", "next-env.d.ts"],
+  "include": ["src"],
+  "exclude": [],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
