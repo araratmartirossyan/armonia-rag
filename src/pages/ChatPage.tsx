@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiClient, type ChatMessage } from "@/lib/api";
+import { chatStorage, type ChatHistory } from "@/lib/chat-storage";
 import {
   Conversation,
   ConversationContent,
@@ -14,41 +15,147 @@ import {
 import {
   PromptInput,
   PromptInputTextarea,
-  PromptInputToolbar,
   PromptInputSubmit,
 } from "@/components/ai/prompt-input";
 import { Reasoning } from "@/components/ai/reasoning";
 import { Sources } from "@/components/ai/sources";
+import { ChatSidebar } from "@/components/chat-sidebar";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { LogOut, Upload, Loader2 } from "lucide-react";
+import { LogOut, Loader2, Menu } from "lucide-react";
 
 export default function ChatPage() {
   const navigate = useNavigate();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const streamingMessageRef = useRef<string>("");
-  const currentMessageIdRef = useRef<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const currentChatIdRef = useRef<string | null>(null);
+  const [isStorageReady, setIsStorageReady] = useState(false);
+  const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    currentChatIdRef.current = currentChatId;
+  }, [currentChatId]);
 
   useEffect(() => {
     if (!apiClient.isAuthenticated()) {
       navigate("/login");
+      return;
     }
+
+    // Initialize IndexedDB
+    chatStorage
+      .init()
+      .then(async () => {
+        setIsStorageReady(true);
+        // Delete chats older than 24 hours
+        try {
+          await chatStorage.deleteOldChats(24);
+          setSidebarRefreshTrigger((prev) => prev + 1);
+        } catch (error) {
+          console.error("Failed to delete old chats:", error);
+        }
+        // Create a new chat on mount
+        handleCreateNewChat();
+      })
+      .catch((error) => {
+        console.error("Failed to initialize chat storage:", error);
+        setIsStorageReady(true);
+        // Still allow using the app even if storage fails
+        handleCreateNewChat();
+      });
+
+    // Set up periodic cleanup (every hour)
+    const cleanupInterval = setInterval(async () => {
+      try {
+        const deletedCount = await chatStorage.deleteOldChats(24);
+        if (deletedCount > 0) {
+          setSidebarRefreshTrigger((prev) => prev + 1);
+          // Check if current chat was deleted
+          const currentId = currentChatIdRef.current;
+          if (currentId) {
+            const chat = await chatStorage.getChat(currentId);
+            if (!chat) {
+              // Current chat was deleted, create a new one
+              const newChatId = Date.now().toString();
+              setCurrentChatId(newChatId);
+              setMessages([]);
+              setInput("");
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to delete old chats:", error);
+      }
+    }, 60 * 60 * 1000); // 1 hour
+
+    return () => {
+      clearInterval(cleanupInterval);
+    };
   }, [navigate]);
 
+  const handleCreateNewChat = useCallback(() => {
+    const newChatId = Date.now().toString();
+    setCurrentChatId(newChatId);
+    setMessages([]);
+    setInput("");
+  }, []);
+
+  const handleSelectChat = useCallback(async (chatId: string) => {
+    try {
+      const chat = await chatStorage.getChat(chatId);
+      if (chat) {
+        setCurrentChatId(chat.id);
+        setMessages(chat.messages);
+        setInput("");
+      }
+    } catch (error) {
+      console.error("Failed to load chat:", error);
+    }
+  }, []);
+
+  const saveChat = useCallback(
+    async (chatMessages: ChatMessage[]) => {
+      if (!isStorageReady || !currentChatId || chatMessages.length === 0) {
+        return;
+      }
+
+      try {
+        // Get first user message as title
+        const firstUserMessage = chatMessages.find((msg) => msg.role === "user");
+        const title = firstUserMessage?.content || "New Chat";
+
+        const chat: ChatHistory = {
+          id: currentChatId,
+          title: title.length > 50 ? title.substring(0, 50) + "..." : title,
+          messages: chatMessages.map((msg) => ({
+            ...msg,
+            timestamp: msg.timestamp,
+          })),
+          timestamp: parseInt(currentChatId),
+          updatedAt: Date.now(),
+        };
+
+        await chatStorage.saveChat(chat);
+        // Trigger sidebar refresh
+        setSidebarRefreshTrigger((prev) => prev + 1);
+      } catch (error) {
+        console.error("Failed to save chat:", error);
+      }
+    },
+    [currentChatId, isStorageReady]
+  );
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      saveChat(messages);
+    }
+  }, [messages, saveChat]);
+
   const handleSubmit = async (value: string) => {
-    if (!value.trim() || isStreaming) return;
+    if (!value.trim() || isLoading) return;
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -59,11 +166,9 @@ export default function ChatPage() {
 
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
-    setIsStreaming(true);
+    setIsLoading(true);
 
     const assistantMessageId = (Date.now() + 1).toString();
-    currentMessageIdRef.current = assistantMessageId;
-    streamingMessageRef.current = "";
 
     const assistantMessage: ChatMessage = {
       id: assistantMessageId,
@@ -76,28 +181,15 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, assistantMessage]);
 
     try {
-      await apiClient.chat(value, undefined, (chunk) => {
-        streamingMessageRef.current += chunk;
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMessageId
-              ? {
-                  ...msg,
-                  content: streamingMessageRef.current,
-                  isStreaming: true,
-                }
-              : msg
-          )
-        );
-      });
+      const response = await apiClient.chat(value);
 
-      // Finalize the message
+      // Update the assistant message with the response
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantMessageId
             ? {
                 ...msg,
-                content: streamingMessageRef.current,
+                content: response.answer,
                 isStreaming: false,
               }
             : msg
@@ -117,9 +209,7 @@ export default function ChatPage() {
         )
       );
     } finally {
-      setIsStreaming(false);
-      currentMessageIdRef.current = null;
-      streamingMessageRef.current = "";
+      setIsLoading(false);
     }
   };
 
@@ -128,84 +218,68 @@ export default function ChatPage() {
     navigate("/login");
   };
 
-  const handleFileUpload = async () => {
-    if (!uploadFile) return;
-
-    setIsUploading(true);
-    try {
-      await apiClient.uploadDocument(uploadFile);
-      setIsUploadDialogOpen(false);
-      setUploadFile(null);
-      // You could show a success message here
-    } catch (error) {
-      alert(error instanceof Error ? error.message : "Upload failed");
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
   return (
-    <div className="flex h-screen w-full flex-col">
-      {/* Header */}
-      <header className="border-b bg-background px-4 py-3">
-        <div className="flex items-center justify-between">
-          <h1 className="text-lg font-semibold">AI Chatbot</h1>
-          <div className="flex items-center gap-2">
-            <Dialog
-              open={isUploadDialogOpen}
-              onOpenChange={setIsUploadDialogOpen}
-            >
-              <DialogTrigger asChild>
-                <Button variant="outline" size="icon">
-                  <Upload className="h-4 w-4" />
-                  <span className="sr-only">Upload document</span>
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Upload Document</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <Input
-                    type="file"
-                    accept=".pdf"
-                    onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                    disabled={isUploading}
-                  />
-                  <Button
-                    onClick={handleFileUpload}
-                    disabled={!uploadFile || isUploading}
-                    className="w-full"
-                  >
-                    {isUploading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Uploading...
-                      </>
-                    ) : (
-                      "Upload"
-                    )}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-            <Button variant="ghost" size="icon" onClick={handleLogout}>
-              <LogOut className="h-4 w-4" />
-              <span className="sr-only">Logout</span>
-            </Button>
-          </div>
-        </div>
-      </header>
+    <div className="flex h-screen w-full">
+      {/* Sidebar */}
+      <ChatSidebar
+        currentChatId={currentChatId}
+        onSelectChat={(chatId) => {
+          handleSelectChat(chatId);
+          setIsSidebarOpen(false);
+        }}
+        onCreateNewChat={() => {
+          handleCreateNewChat();
+          setIsSidebarOpen(false);
+        }}
+        refreshTrigger={sidebarRefreshTrigger}
+        isOpen={isSidebarOpen}
+        onOpenChange={setIsSidebarOpen}
+        onChatDeleted={() => {
+          // Reload current chat or create new if deleted
+          if (currentChatId) {
+            handleSelectChat(currentChatId).catch(() => {
+              handleCreateNewChat();
+            });
+          } else {
+            handleCreateNewChat();
+          }
+        }}
+      />
 
-      {/* Conversation */}
-      <Conversation className="flex-1">
+      {/* Main Content */}
+      <div className="flex flex-1 flex-col min-w-0">
+        {/* Header */}
+        <header className="border-b bg-background px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsSidebarOpen(true)}
+              >
+                <Menu className="h-5 w-5" />
+                <span className="sr-only">Open sidebar</span>
+              </Button>
+              <h1 className="text-lg font-semibold">Armonia</h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="icon" onClick={handleLogout}>
+                <LogOut className="h-4 w-4" />
+                <span className="sr-only">Logout</span>
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        {/* Conversation */}
+        <Conversation className="flex-1">
         <ConversationContent>
           {messages.length === 0 && (
             <div className="flex h-full items-center justify-center text-center text-muted-foreground">
               <div>
                 <p className="text-lg font-medium">Start a conversation</p>
                 <p className="text-sm">
-                  Ask me anything or upload a document for context
+                  Ask me anything
                 </p>
               </div>
             </div>
@@ -236,17 +310,19 @@ export default function ChatPage() {
 
       {/* Input */}
       <div className="border-t bg-background p-4">
-        <PromptInput onSubmit={handleSubmit} disabled={isStreaming}>
-          <PromptInputTextarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask me anything..."
-            disabled={isStreaming}
-          />
-          <PromptInputToolbar>
-            <PromptInputSubmit disabled={!input.trim() || isStreaming} />
-          </PromptInputToolbar>
-        </PromptInput>
+        <div className="flex items-center justify-center">
+          <PromptInput onSubmit={handleSubmit} disabled={isLoading} className="flex items-center gap-2">
+            <PromptInputTextarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask me anything..."
+              disabled={isLoading}
+              className="w-[400px]"
+            />
+            <PromptInputSubmit disabled={!input.trim() || isLoading} />
+          </PromptInput>
+        </div>
+      </div>
       </div>
     </div>
   );

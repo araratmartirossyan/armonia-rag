@@ -34,14 +34,13 @@ export interface Source {
 }
 
 export interface ChatRequest {
-  message: string;
-  knowledgeBaseId?: string;
+  question: string;
+  licenseKey: string;
+  kbId?: string;
 }
 
 export interface ChatResponse {
-  response: string;
-  reasoning?: string;
-  sources?: Source[];
+  answer: string;
 }
 
 export interface UploadDocumentRequest {
@@ -53,6 +52,11 @@ class ApiClient {
   private getToken(): string | null {
     if (typeof window === "undefined") return null;
     return localStorage.getItem("auth_token");
+  }
+
+  private getLicenseKey(): string | null {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem("license_key");
   }
 
   private async request<T>(
@@ -99,6 +103,10 @@ class ApiClient {
       localStorage.setItem("auth_token", token);
     }
 
+    if (response.license && typeof window !== "undefined") {
+      localStorage.setItem("license_key", response.license);
+    }
+
     return {
       accessToken: token,
       license: response.license,
@@ -107,13 +115,17 @@ class ApiClient {
   }
 
   async chat(
-    message: string,
-    knowledgeBaseId?: string,
-    onStream?: (chunk: string) => void
+    question: string,
+    kbId?: string
   ): Promise<ChatResponse> {
     const token = this.getToken();
     if (!token) {
       throw new Error("Not authenticated");
+    }
+
+    const licenseKey = this.getLicenseKey();
+    if (!licenseKey) {
+      throw new Error("License key not found");
     }
 
     const response = await fetch(`${API_BASE_URL}/rag/chat`, {
@@ -122,7 +134,11 @@ class ApiClient {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ message, knowledgeBaseId }),
+      body: JSON.stringify({
+        question,
+        licenseKey,
+        ...(kbId && { kbId }),
+      }),
     });
 
     if (!response.ok) {
@@ -134,57 +150,6 @@ class ApiClient {
       );
     }
 
-    // Check if response is streaming
-    const contentType = response.headers.get("content-type");
-    if (
-      contentType?.includes("text/event-stream") ||
-      contentType?.includes("text/plain")
-    ) {
-      // Handle streaming response
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let fullResponse = "";
-
-      if (reader) {
-        // eslint-disable-next-line no-constant-condition
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const data = line.slice(6);
-              if (data === "[DONE]") continue;
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.content) {
-                  fullResponse += parsed.content;
-                  onStream?.(parsed.content);
-                }
-              } catch {
-                // If not JSON, treat as plain text
-                fullResponse += data;
-                onStream?.(data);
-              }
-            } else if (line.trim()) {
-              fullResponse += line;
-              onStream?.(line);
-            }
-          }
-        }
-      }
-
-      return {
-        response: fullResponse,
-      };
-    }
-
-    // Regular JSON response
     return response.json();
   }
 
@@ -226,6 +191,7 @@ class ApiClient {
   logout(): void {
     if (typeof window !== "undefined") {
       localStorage.removeItem("auth_token");
+      localStorage.removeItem("license_key");
     }
   }
 

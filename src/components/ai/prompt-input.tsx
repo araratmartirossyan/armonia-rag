@@ -47,7 +47,7 @@ const PromptInput = React.forwardRef<HTMLFormElement, PromptInputProps>(
         <form
           ref={ref}
           onSubmit={handleSubmit}
-          className={cn("flex w-full flex-col gap-2", className)}
+          className={cn("flex gap-2", className)}
           {...props}
         >
           {children}
@@ -82,7 +82,7 @@ const PromptInputTextarea = React.forwardRef<
     <Textarea
       ref={ref}
       name="prompt"
-      className={cn("min-h-[60px] resize-none", className)}
+      className={cn("h-9 min-h-9 resize-none", className)}
       onKeyDown={handleKeyDown}
       disabled={disabled}
       {...props}
