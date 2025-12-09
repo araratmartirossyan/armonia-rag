@@ -1,20 +1,20 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { Button } from "@/components/ui/button"
-import { ChevronDown, ChevronUp } from "lucide-react"
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import { Button } from "@/components/ui/button";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface ReasoningProps extends React.HTMLAttributes<HTMLDivElement> {
-  content?: string
-  defaultOpen?: boolean
+  content?: string;
+  defaultOpen?: boolean;
 }
 
 const Reasoning = React.forwardRef<HTMLDivElement, ReasoningProps>(
   ({ className, content, defaultOpen = false, ...props }, ref) => {
-    const [isOpen, setIsOpen] = React.useState(defaultOpen)
+    const [isOpen, setIsOpen] = React.useState(defaultOpen);
 
-    if (!content) return null
+    if (!content) return null;
 
     return (
       <div
@@ -46,18 +46,17 @@ const Reasoning = React.forwardRef<HTMLDivElement, ReasoningProps>(
           </div>
         )}
       </div>
-    )
+    );
   }
-)
-Reasoning.displayName = "Reasoning"
+);
+Reasoning.displayName = "Reasoning";
 
 const ReasoningTrigger = React.forwardRef<
   HTMLButtonElement,
   React.ButtonHTMLAttributes<HTMLButtonElement> & {
-    isOpen?: boolean
-    onToggle?: () => void
+    onToggle?: () => void;
   }
->(({ className, isOpen, onToggle, children, ...props }, ref) => {
+>(({ className, onToggle, children, ...props }, ref) => {
   return (
     <Button
       ref={ref}
@@ -69,9 +68,9 @@ const ReasoningTrigger = React.forwardRef<
     >
       {children}
     </Button>
-  )
-})
-ReasoningTrigger.displayName = "ReasoningTrigger"
+  );
+});
+ReasoningTrigger.displayName = "ReasoningTrigger";
 
 const ReasoningContent = React.forwardRef<
   HTMLDivElement,
@@ -83,9 +82,8 @@ const ReasoningContent = React.forwardRef<
       className={cn("rounded-md border bg-muted/50 p-3 text-xs", className)}
       {...props}
     />
-  )
-})
-ReasoningContent.displayName = "ReasoningContent"
+  );
+});
+ReasoningContent.displayName = "ReasoningContent";
 
-export { Reasoning, ReasoningTrigger, ReasoningContent }
-
+export { Reasoning, ReasoningTrigger, ReasoningContent };

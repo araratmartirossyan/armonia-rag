@@ -1,8 +1,6 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect } from 'react'
-import { apiClient } from '@/lib/api'
-import LoginPage from '@/pages/LoginPage'
-import ChatPage from '@/pages/ChatPage'
+import { Routes, Route, Navigate } from "react-router-dom";
+import LoginPage from "@/pages/LoginPage";
+import ChatPage from "@/pages/ChatPage";
 
 function App() {
   return (
@@ -11,8 +9,7 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/chat" element={<ChatPage />} />
     </Routes>
-  )
+  );
 }
 
-export default App
-
+export default App;

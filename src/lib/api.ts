@@ -1,4 +1,5 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://api-ai-rag-o62iq.ondigitalocean.app';
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "https://api-ai-rag-o62iq.ondigitalocean.app";
 
 export interface LoginRequest {
   email: string;
@@ -7,6 +8,7 @@ export interface LoginRequest {
 
 export interface LoginResponse {
   accessToken: string;
+  license: string;
   user: {
     id: string;
     email: string;
@@ -17,7 +19,7 @@ export interface LoginResponse {
 export interface ChatMessage {
   id: string;
   content: string;
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   timestamp: Date;
   reasoning?: string;
   sources?: Source[];
@@ -49,8 +51,8 @@ export interface UploadDocumentRequest {
 
 class ApiClient {
   private getToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem('auth_token');
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem("auth_token");
   }
 
   private async request<T>(
@@ -59,12 +61,12 @@ class ApiClient {
   ): Promise<T> {
     const token = this.getToken();
     const headers: HeadersInit = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...options.headers,
     };
 
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+      (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
     }
 
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -73,29 +75,34 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'An error occurred' }));
-      throw new Error(error.message || `HTTP error! status: ${response.status}`);
+      const error = await response
+        .json()
+        .catch(() => ({ message: "An error occurred" }));
+      throw new Error(
+        error.message || `HTTP error! status: ${response.status}`
+      );
     }
 
     return response.json();
   }
 
   async login(credentials: LoginRequest): Promise<LoginResponse> {
-    const response = await this.request<any>('/auth/login', {
-      method: 'POST',
+    const response = await this.request<LoginResponse>("/auth/login", {
+      method: "POST",
       body: JSON.stringify(credentials),
     });
-    
+
     // Handle different possible response formats
-    const token = response.accessToken || response.token || response.access_token;
-    
-    if (token && typeof window !== 'undefined') {
-      localStorage.setItem('auth_token', token);
+    const token = response.accessToken;
+
+    if (token && typeof window !== "undefined") {
+      localStorage.setItem("auth_token", token);
     }
-    
+
     return {
       accessToken: token,
-      user: response.user || { id: '', email: credentials.email, role: '' }
+      license: response.license,
+      user: response.user || { id: "", email: credentials.email, role: "" },
     };
   }
 
@@ -106,45 +113,53 @@ class ApiClient {
   ): Promise<ChatResponse> {
     const token = this.getToken();
     if (!token) {
-      throw new Error('Not authenticated');
+      throw new Error("Not authenticated");
     }
 
     const response = await fetch(`${API_BASE_URL}/rag/chat`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({ message, knowledgeBaseId }),
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'An error occurred' }));
-      throw new Error(error.message || `HTTP error! status: ${response.status}`);
+      const error = await response
+        .json()
+        .catch(() => ({ message: "An error occurred" }));
+      throw new Error(
+        error.message || `HTTP error! status: ${response.status}`
+      );
     }
 
     // Check if response is streaming
-    const contentType = response.headers.get('content-type');
-    if (contentType?.includes('text/event-stream') || contentType?.includes('text/plain')) {
+    const contentType = response.headers.get("content-type");
+    if (
+      contentType?.includes("text/event-stream") ||
+      contentType?.includes("text/plain")
+    ) {
       // Handle streaming response
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
-      let buffer = '';
-      let fullResponse = '';
+      let buffer = "";
+      let fullResponse = "";
 
       if (reader) {
+        // eslint-disable-next-line no-constant-condition
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
 
           for (const line of lines) {
-            if (line.startsWith('data: ')) {
+            if (line.startsWith("data: ")) {
               const data = line.slice(6);
-              if (data === '[DONE]') continue;
+              if (data === "[DONE]") continue;
               try {
                 const parsed = JSON.parse(data);
                 if (parsed.content) {
@@ -173,37 +188,44 @@ class ApiClient {
     return response.json();
   }
 
-  async uploadDocument(file: File, knowledgeBaseId?: string): Promise<{ message: string }> {
+  async uploadDocument(
+    file: File,
+    knowledgeBaseId?: string
+  ): Promise<{ message: string }> {
     const token = this.getToken();
     if (!token) {
-      throw new Error('Not authenticated');
+      throw new Error("Not authenticated");
     }
 
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append("file", file);
     if (knowledgeBaseId) {
-      formData.append('knowledgeBaseId', knowledgeBaseId);
+      formData.append("knowledgeBaseId", knowledgeBaseId);
     }
 
     const response = await fetch(`${API_BASE_URL}/rag/upload`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
       },
       body: formData,
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'An error occurred' }));
-      throw new Error(error.message || `HTTP error! status: ${response.status}`);
+      const error = await response
+        .json()
+        .catch(() => ({ message: "An error occurred" }));
+      throw new Error(
+        error.message || `HTTP error! status: ${response.status}`
+      );
     }
 
     return response.json();
   }
 
   logout(): void {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('auth_token');
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("auth_token");
     }
   }
 
@@ -213,4 +235,3 @@ class ApiClient {
 }
 
 export const apiClient = new ApiClient();
-

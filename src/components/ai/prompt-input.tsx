@@ -1,43 +1,46 @@
-import * as React from "react"
-import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
-import { Send } from "lucide-react"
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Send } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface PromptInputContextValue {
-  onSubmit: (value: string) => void
-  disabled?: boolean
+  onSubmit: (value: string) => void;
+  disabled?: boolean;
 }
 
-const PromptInputContext = React.createContext<PromptInputContextValue | undefined>(undefined)
+const PromptInputContext = React.createContext<
+  PromptInputContextValue | undefined
+>(undefined);
 
 const usePromptInput = () => {
-  const context = React.useContext(PromptInputContext)
+  const context = React.useContext(PromptInputContext);
   if (!context) {
-    throw new Error("PromptInput components must be used within PromptInput")
+    throw new Error("PromptInput components must be used within PromptInput");
   }
-  return context
-}
+  return context;
+};
 
-interface PromptInputProps extends React.HTMLAttributes<HTMLFormElement> {
-  onSubmit: (value: string) => void
-  disabled?: boolean
+interface PromptInputProps
+  extends Omit<React.FormHTMLAttributes<HTMLFormElement>, "onSubmit"> {
+  onSubmit: (value: string) => void;
+  disabled?: boolean;
 }
 
 const PromptInput = React.forwardRef<HTMLFormElement, PromptInputProps>(
   ({ className, onSubmit, disabled, children, ...props }, ref) => {
     const handleSubmit = React.useCallback(
       (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault()
-        const formData = new FormData(e.currentTarget)
-        const value = formData.get("prompt") as string
+        e.preventDefault();
+        const formData = new FormData(e.currentTarget);
+        const value = formData.get("prompt") as string;
         if (value?.trim() && !disabled) {
-          onSubmit(value.trim())
-          e.currentTarget.reset()
+          onSubmit(value.trim());
+          e.currentTarget.reset();
         }
       },
       [onSubmit, disabled]
-    )
+    );
 
     return (
       <PromptInputContext.Provider value={{ onSubmit, disabled }}>
@@ -50,30 +53,30 @@ const PromptInput = React.forwardRef<HTMLFormElement, PromptInputProps>(
           {children}
         </form>
       </PromptInputContext.Provider>
-    )
+    );
   }
-)
-PromptInput.displayName = "PromptInput"
+);
+PromptInput.displayName = "PromptInput";
 
 const PromptInputTextarea = React.forwardRef<
   HTMLTextAreaElement,
   React.TextareaHTMLAttributes<HTMLTextAreaElement>
 >(({ className, onKeyDown, ...props }, ref) => {
-  const { disabled } = usePromptInput()
+  const { disabled } = usePromptInput();
 
   const handleKeyDown = React.useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault()
-        const form = e.currentTarget.form
+        e.preventDefault();
+        const form = e.currentTarget.form;
         if (form && !disabled) {
-          form.requestSubmit()
+          form.requestSubmit();
         }
       }
-      onKeyDown?.(e)
+      onKeyDown?.(e);
     },
     [onKeyDown, disabled]
-  )
+  );
 
   return (
     <Textarea
@@ -84,9 +87,9 @@ const PromptInputTextarea = React.forwardRef<
       disabled={disabled}
       {...props}
     />
-  )
-})
-PromptInputTextarea.displayName = "PromptInputTextarea"
+  );
+});
+PromptInputTextarea.displayName = "PromptInputTextarea";
 
 const PromptInputToolbar = React.forwardRef<
   HTMLDivElement,
@@ -98,15 +101,15 @@ const PromptInputToolbar = React.forwardRef<
       className={cn("flex items-center justify-between", className)}
       {...props}
     />
-  )
-})
-PromptInputToolbar.displayName = "PromptInputToolbar"
+  );
+});
+PromptInputToolbar.displayName = "PromptInputToolbar";
 
 const PromptInputSubmit = React.forwardRef<
   HTMLButtonElement,
   React.ButtonHTMLAttributes<HTMLButtonElement>
 >(({ className, ...props }, ref) => {
-  const { disabled } = usePromptInput()
+  const { disabled } = usePromptInput();
 
   return (
     <Button
@@ -120,14 +123,13 @@ const PromptInputSubmit = React.forwardRef<
       <Send className="h-4 w-4" />
       <span className="sr-only">Send message</span>
     </Button>
-  )
-})
-PromptInputSubmit.displayName = "PromptInputSubmit"
+  );
+});
+PromptInputSubmit.displayName = "PromptInputSubmit";
 
 export {
   PromptInput,
   PromptInputTextarea,
   PromptInputToolbar,
   PromptInputSubmit,
-}
-
+};

@@ -4,6 +4,7 @@
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "ESNext",
+    "baseUrl": ".",
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
@@ -18,10 +19,10 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*", "./*"]
     }
   },
-  "include": ["src"],
+  "include": ["src", "components", "lib"],
+  "exclude": ["app", "next-env.d.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
-
