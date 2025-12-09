@@ -39,6 +39,7 @@ coverage
 .cache
 .parcel-cache
 .eslintcache
+.yarn/install-state.gz
 
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
