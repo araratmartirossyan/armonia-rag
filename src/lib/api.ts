@@ -7,9 +7,13 @@ export interface LoginRequest {
 }
 
 export interface LoginResponse {
-  accessToken: string;
-  license: string;
-  user: {
+  accessToken?: string;
+  access_token?: string;
+  token?: string;
+  license?: string;
+  licenseKey?: string;
+  license_key?: string;
+  user?: {
     id: string;
     email: string;
     role: string;
@@ -97,19 +101,23 @@ class ApiClient {
     });
 
     // Handle different possible response formats
-    const token = response.accessToken;
+    const token =
+      response.accessToken || response.access_token || response.token || "";
+    const license =
+      response.license || response.licenseKey || response.license_key || "";
 
-    if (token && typeof window !== "undefined") {
-      localStorage.setItem("auth_token", token);
-    }
-
-    if (response.license && typeof window !== "undefined") {
-      localStorage.setItem("license_key", response.license);
+    if (typeof window !== "undefined") {
+      if (token) {
+        localStorage.setItem("auth_token", token);
+      }
+      if (license) {
+        localStorage.setItem("license_key", license);
+      }
     }
 
     return {
       accessToken: token,
-      license: response.license,
+      license,
       user: response.user || { id: "", email: credentials.email, role: "" },
     };
   }
